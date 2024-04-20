@@ -1,14 +1,42 @@
 ---
 title: "PSY 8712 Week 12 Project"
 author: "Amanda Jensen"
-output: 
-  html_document:
-    df_print: paged
+output: html_document
 ---
 
 ### Script Settings and Resources
+```{r}
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+library(tidyverse)      
+library(RedditExtractoR)
+```
 
 ### Data Import and Cleaning
+```{r}
+#import content from reddit - went with Reddit Extractor after previous web scraping project
+# reddit_thread_urls <- find_thread_urls(
+#   subreddit = "IOPsychology",
+#   sort_by = "new",
+#   period = "year")
+
+#pull out data we want from reddit extraction
+# reddit_content <- get_thread_content(reddit_thread_urls$url)
+
+#create csv file of urls
+# write_csv(reddit_thread_urls, "../data/reddit_thread_urls.csv")
+
+#create csv file from the scraped reddit data
+# write_csv(reddit_content$threads, "../data/reddit_content.csv")
+
+#import data from csv file
+data <- read_csv("../data/reddit_content.csv")
+
+week12_tbl <- tibble(
+  upvotes = data$upvotes,
+  title = data$title
+)
+```
+
 
 ### Visualization
 
