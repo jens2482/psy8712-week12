@@ -9,6 +9,9 @@ output: html_document
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(tidyverse)      
 library(RedditExtractoR)
+library(tm)
+library(qdap)
+library(textstem)
 ```
 
 ### Data Import and Cleaning
@@ -35,6 +38,40 @@ week12_tbl <- tibble(
   upvotes = data$upvotes,
   title = data$title
 )
+```
+
+```{r}
+io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
+
+#create customized function to check pre-processing - used code from class lecture
+compare_them <- function() {
+  casenum <- sample(1:952, 1) 
+  print(io_corpus_original[[casenum]]$content)
+  print(io_corpus[[casenum]]$content)
+}
+
+#create customized cleaning function - this is how they did it in data camp (though I know it's not really necessary to create a function since we're only applying it to one corpus)
+clean_corpus <- function(corpus) {
+  corpus <- corpus %>%
+    tm_map(content_transformer(replace_abbreviation)) %>% #get rid of abbreviations
+    tm_map(content_transformer(replace_contraction)) %>% #replace contractions
+    tm_map(removePunctuation) %>%   #remove punctuation
+    tm_map(content_transformer(tolower)) %>%  #make lowercase 
+    tm_map(removeWords, words = c(stopwords("en"), "io psychology", "io psych", "io", "riopsychology", "iopsychology", "iopsych")) %>%  #remove stop words
+    tm_map(stripWhitespace) %>%  #strip whitespace
+    tm_map(content_transformer(lemmatize_words))
+  return(corpus)
+}
+
+#apply cleaning function to corpus
+io_corpus <- clean_corpus(io_corpus_original)
+
+#run function comparing cleaned corpus to original
+compare_them() 
+```
+
+```{r}
+
 ```
 
 
