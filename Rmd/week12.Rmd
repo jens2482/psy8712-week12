@@ -1,0 +1,19 @@
+---
+title: "PSY 8712 Week 12 Project"
+author: "Amanda Jensen"
+output: 
+  html_document:
+    df_print: paged
+---
+
+### Script Settings and Resources
+
+### Data Import and Cleaning
+
+### Visualization
+
+### Analysis
+
+### Publication
+
+
