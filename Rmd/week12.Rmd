@@ -12,6 +12,7 @@ library(RedditExtractoR)
 library(tm)
 library(qdap)
 library(textstem)
+library(RWeka)
 ```
 
 ### Data Import and Cleaning
@@ -71,7 +72,20 @@ compare_them()
 ```
 
 ```{r}
+#set up bigram tokenizer
+bigram_tokenizer <- function(x) NGramTokenizer(x, Weka_control(min=1, max=2))
 
+#create dtm
+io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = bigram_tokenizer))
+
+#view dtm
+io_dtm %>%
+  as.matrix %>% 
+  as_tibble %>% 
+  View
+
+#remove sparse terms
+io_slim_dtm <- removeSparseTerms(io_dtm, .997) #gives a N/k ratio of 2.19
 ```
 
 
