@@ -97,11 +97,6 @@ io_slim_dtm <- removeSparseTerms(io_dtm, .997) #gives a N/k ratio of 2.17
 io_slim_dtm2 <- io_slim_dtm[rowSums(as.matrix(io_slim_dtm)) > 0, ]
 ```
 
-```{r final tbl creation}
-final_tbl <- topics_tbl %>%
-  left_join(week12_tbl, by = c("original" = "title"))
-```
-
 
 ### Analysis
 ```{r run lda and final tibble}
@@ -162,9 +157,12 @@ topics_tbl <- lda_gamma %>%
 ##### It appears that topic 1 was pretty close. Many of the titles are related to "What have you been reading, and what do you think of it?", so it is people generating a discussion about current literature. Topic 2 I was pretty close on. It looks like a lot of the topics are asking for advice about what programs to join (rather than what to do post-grad) but the idea of seeking advice related to the program was still what I was thinking, just at the wrong point in time. Topic 3 was pretty close, that's more about career advice.Topic 4 appears to be sort of miscellaneous. The topics are related to random questions about certification, where people are staying for a conference, and other general inquiries, so I would say I didn't quite get that topic right. 
 ```
 
-```{r statistic and machine learning analysis}
-library(caret)
+```{r final tbl creation}
+final_tbl <- topics_tbl %>%
+  left_join(week12_tbl, by = c("original" = "title"))
+```
 
+```{r statistic and machine learning analysis}
 #set up train and test sets
 rows <- sample(nrow(final_tbl)) # Shuffle row indices
 shuffled_data <- final_tbl[rows,] # Put data in random order
