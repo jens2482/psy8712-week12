@@ -16,6 +16,9 @@ library(RWeka)
 library(ldatuning)
 library(topicmodels)
 library(tidytext)
+library(wordcloud)
+library(haven)
+library(caret)
 ```
 
 ### Data Import and Cleaning
@@ -43,12 +46,10 @@ week12_tbl <- tibble(
   upvotes = data$upvotes,
   title = data$title
 )
-#add doc id - since in the previous document you only wanted two variables, I followed the directions. However, the doc id is needed in the final tibble so I found it was easiest to include it at the start.
-week12_tbl_id <-  week12_tbl %>% mutate(doc_id = row_number())
 ```
 
 ```{r create corpus and clean}
-io_corpus_original <- VCorpus(VectorSource(week12_tbl_id$title))
+io_corpus_original <- VCorpus(VectorSource(week12_tbl$title))
 
 #create customized function to check pre-processing - used code from class lecture
 compare_them <- function() {
@@ -81,23 +82,29 @@ compare_them()
 #set up bigram tokenizer
 bigram_tokenizer <- function(x) NGramTokenizer(x, Weka_control(min=1, max=2))
 
-#create dtm
+#create dtm with bigrams
 io_dtm <- DocumentTermMatrix(io_corpus, control = list(tokenize = bigram_tokenizer))
 
-#view dtm
-io_dtm %>%
+#view dtm as tibble - I use this later to create the word cloud too
+io_dtm_tbl <- io_dtm %>%
   as.matrix %>% 
-  as_tibble %>%
-  View
+  as_tibble 
 
 #remove sparse terms
 io_slim_dtm <- removeSparseTerms(io_dtm, .997) #gives a N/k ratio of 2.17
-```
 
-```{r run lda and final tibble}
 #get rid of rows with all zeros - N/k ratio is still 2.04 - Code won't run with rows with zeros
 io_slim_dtm2 <- io_slim_dtm[rowSums(as.matrix(io_slim_dtm)) > 0, ]
+```
 
+```{r final tbl creation}
+final_tbl <- topics_tbl %>%
+  left_join(week12_tbl, by = c("original" = "title"))
+```
+
+
+### Analysis
+```{r run lda and final tibble}
 #determine number of topics to extract
 dtm_tune <- FindTopicsNumber(
   io_slim_dtm2,
@@ -121,9 +128,11 @@ lda_results <- LDA(
   control = list(seed = 42)
 )
 
-lda_beta <- lda_results %>%
+#look at betas (probability a term belongs in a topic)
+lda_beta <- lda_results %>% 
   tidy(matrix = "beta") 
 
+#look at gammas (probability a document belongs to a topic)
 lda_gamma <- lda_results %>%
   tidy(matrix = "gamma") %>%
   group_by(document) %>%
@@ -139,17 +148,79 @@ docid_name <- tibble(
 ) %>%
   mutate(document = row_number())
 
+#total tibble
 topics_tbl <- lda_gamma %>%
-  left_join (docid_name, by = "document") %>%
-  rename (doc_id = document, probability = gamma, original = title) %>%
-  select (doc_id,original, topic, probability) %>%
-  as_tibble()
+  left_join (docid_name, by = "document") %>% #get titles from docid_name
+  rename (doc_id = document, probability = gamma, original = title) %>% #change headings to match assignment
+  select (doc_id,original, topic, probability) %>% #reorder to match assignment
+  as_tibble() #is this necessary? 
+
+##### Using the beta matrix alone, what topics would you conclude your final topic list maps onto? (e.g., topic 1, 2, 3…n each reflect what substantive topic construct? Use your best judgment.)
+##### I think that topic 1 would be representing academic or scholarly thinking. The words with the highest betas were think, discussion, and reading, so I think this topic would be something about discussing things or thinking academically. I think topic 2 has to do with post-graduate opportunities. The top words were work, psychology, masters, advice, etc. All these words have to do with life after the program ends. For topic 3 it's a little tricky because the words are similar to topic 2, but I think it might be more of a career advice topic. Words like job, career, and help are the top words so this might be more people who are already graduated looking for advice in their job maybe. This one is tough. Topic 4 seems like it might be the most general, but perhaps a topic could be research aid. Words like research, looking, anyone, lead me to believe these are the types of topics where people are looking for people to participate in research.  
+
+##### Look at the original text of documents with the highest and lowest probabilities assigned to each document. Do your topic names derived from your interpretation of the beta matrix conceptually match with the content of the original posts? What kind of validity evidence does your answer to this question represent?
+##### It appears that topic 1 was pretty close. Many of the titles are related to "What have you been reading, and what do you think of it?", so it is people generating a discussion about current literature. Topic 2 I was pretty close on. It looks like a lot of the topics are asking for advice about what programs to join (rather than what to do post-grad) but the idea of seeking advice related to the program was still what I was thinking, just at the wrong point in time. Topic 3 was pretty close, that's more about career advice.Topic 4 appears to be sort of miscellaneous. The topics are related to random questions about certification, where people are staying for a conference, and other general inquiries, so I would say I didn't quite get that topic right. 
+```
+
+```{r statistic and machine learning analysis}
+library(caret)
+
+#set up train and test sets
+rows <- sample(nrow(final_tbl)) # Shuffle row indices
+shuffled_data <- final_tbl[rows,] # Put data in random order
+split <- round(nrow(final_tbl) * 0.75) # Determine row to split on
+train_tbl <- shuffled_data[1:split,] # Create train set
+test_tbl <- shuffled_data[(split + 1):nrow(shuffled_data),] # Create test set
+
+#training folds
+training_folds <- createFolds(train_tbl$upvotes, k = 10, returnTrain = TRUE)
+
+#statistical model - used same code from ML assignment
+model1 <- train(
+  upvotes ~ topic,
+  train_tbl,
+  method = "lm",
+  na.action = na.pass,
+  preProcess = c("center", "scale", "zv", "nzv", "medianImpute"),
+  trControl = trainControl(method = "cv", number = 10, verboseIter = TRUE, index = training_folds)
+)
+model1
+cv_m1 <- model1$results$Rsquared
+
+#metrics for holdout set - used same code from ML assignment
+holdout_m1 <- cor(predict(model1, test_tbl, na.action = na.pass), test_tbl$upvotes)^2
+
+#machine learning model (random forest) -  used same code from ML assignment
+model2 <- train(
+  upvotes ~ topic,
+  data = train_tbl,
+  method = "ranger",
+  trControl = trainControl(method = "cv", number = 10, verboseIter = TRUE, index = training_folds),
+  tuneGrid = data.frame(.mtry = 1, .splitrule = "variance", .min.node.size = 1),
+  na.action = na.pass,
+  preProcess = c("center", "scale", "zv", "nzv", "medianImpute")
+)
+
+#metrics for test set-  used same code from ML assignment
+model2
+cv_m2 <- max(model2$results$Rsquared)
+holdout_m2 <- cor(predict(model2, test_tbl, na.action = na.pass), test_tbl$upvotes)^2
+
+#summary of model comparisons
+summary(resamples(list(model1 = model1, model2 = model2)), metric = "Rsquared")
+dotplot(resamples(list(model1 = model1, model2 = model2)), metric = "Rsquared")
+
+#In comparing how well a linear model and a random forest model predict upvotes, it turns out they perform pretty similarly under the best conditions, with the random forest just slightly ahead. Even at their best, though, both models can only explain about 15% of what influences upvotes. So there’s a lot going on that these models aren’t capturing and neither of them do a very good job.
 ```
 
 ### Visualization
+```{r}
+# Word Cloud - used class code
+wordcloud(
+  words = names(io_dtm_tbl),
+  freq = colSums(io_dtm_tbl),
+  colors = brewer.pal(9,"YlOrBr")
+)
 
-### Analysis
-
-### Publication
-
-
+##### The word that stands out the largest is "job". That makes sense that on reddit the most people are interested in jobs, because that's ultimately what most people's goals probably are in entering and IO psychology program. A lot of the other words are the ones I highlighted for our topics, things like research masters, think, discussion, career, reading etc. So those most frequent terms dictated the topics. 
+```
